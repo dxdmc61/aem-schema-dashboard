@@ -530,6 +530,30 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
+    /* ─── Auth guard ─── */
+    .shell { opacity: 0; transition: opacity 0.4s ease; }
+    .shell.ready { opacity: 1; }
+    #auth-loader {
+      position: fixed; inset: 0; background: var(--bg);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 20px; z-index: 9999;
+    }
+    #auth-loader.gone { display: none; }
+    .auth-spinner { width: 48px; height: 48px; position: relative; }
+    .auth-spinner::before, .auth-spinner::after { content: ''; position: absolute; border-radius: 50%; }
+    .auth-spinner::before { inset: 0; border: 3px solid var(--border); border-top-color: var(--accent); animation: spin2 0.9s linear infinite; }
+    .auth-spinner::after { inset: 8px; border: 3px solid transparent; border-top-color: var(--accent2); animation: spin2 0.6s linear infinite reverse; }
+    @keyframes spin2 { to { transform: rotate(360deg); } }
+    .auth-label { font-family: var(--mono); font-size: 11px; color: var(--text3); letter-spacing: 0.1em; }
+    /* ─── User chip ─── */
+    .user-chip { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 99px; padding: 5px 14px 5px 8px; }
+    .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink:0; }
+    .user-info { display: flex; flex-direction: column; line-height: 1.3; }
+    .user-name { font-size: 12px; font-weight: 600; color: var(--text); }
+    .user-url { font-size: 10px; color: var(--text3); font-family: var(--mono); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn-logout { padding: 7px 14px; border-radius: 8px; border: 1px solid rgba(255,107,107,0.25); background: rgba(255,107,107,0.08); color: var(--error); cursor: pointer; font-family: var(--sans); font-size: 12px; font-weight: 500; transition: all 0.15s; display: inline-flex; align-items: center; gap: 5px; }
+    .btn-logout:hover { background: rgba(255,107,107,0.2); border-color: var(--error); }
+
     /* ─── Responsive ─── */
     @media (max-width: 900px) {
       .grid-2 { grid-template-columns: 1fr; }
@@ -600,6 +624,14 @@
       <div class="topbar-actions">
         <button class="btn btn-ghost" onclick="testConnection()">⚡ Test AEM</button>
         <button class="btn btn-primary" onclick="showPanel('apply')">+ Apply Schema</button>
+        <div class="user-chip" id="user-chip">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <div class="user-info">
+            <div class="user-name" id="user-display-name">—</div>
+            <div class="user-url" id="user-display-url">—</div>
+          </div>
+        </div>
+        <button class="btn-logout" onclick="doLogout()">⎋ Sign Out</button>
       </div>
     </div>
 
@@ -1396,15 +1428,46 @@ function renderApiDocs() {
 }
 
 // ─────────────────────────────────────────────
-// Boot
+// Auth Guard + Boot
 // ─────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  // Load first template
+async function doLogout() {
+  try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(_) {}
+  window.location.replace('/login.html');
+}
+
+async function populateUserChip(data) {
+  const initials = (data.username || '?').slice(0,2).toUpperCase();
+  document.getElementById('user-avatar').textContent = initials;
+  document.getElementById('user-display-name').textContent = data.username || '—';
+  const shortUrl = (data.aemUrl || '').replace('https://','').replace('http://','');
+  document.getElementById('user-display-url').textContent = shortUrl || '—';
+  document.getElementById('sidebar-url').textContent = shortUrl || 'Not configured';
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  // ── Auth check ──
+  const loader = document.getElementById('auth-loader');
+  try {
+    const res = await fetch('/api/auth/me');
+    if (!res.ok) { window.location.replace('/login.html'); return; }
+    const data = await res.json();
+    if (!data.loggedIn) { window.location.replace('/login.html'); return; }
+    populateUserChip(data);
+  } catch (_) {
+    window.location.replace('/login.html'); return;
+  }
+  loader.classList.add('gone');
+  document.querySelector('.shell').classList.add('ready');
+
+  // ── Init ──
   document.getElementById('schema-editor').value = JSON.stringify(templates.webpage, null, 2);
-  // Boot dashboard
   loadDashboard();
-  loadConfigStatus();
 });
 </script>
+<!-- Auth loader -->
+<div id="auth-loader">
+  <div class="auth-spinner"></div>
+  <div class="auth-label">VERIFYING SESSION</div>
+</div>
 </body>
 </html>
