@@ -1,0 +1,12 @@
+/* main.css - Main CSS Import File */
+
+/* Import all CSS modules */
+@import 'variables.css';
+@import 'animations.css';
+@import 'layout.css';
+@import 'components.css';
+@import 'forms.css';
+@import 'panels.css';
+@import 'responsive.css';
+
+/* Any additional global styles can go here */

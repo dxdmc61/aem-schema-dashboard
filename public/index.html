@@ -1,729 +1,388 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AEM Schema Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #0a0c10;
-      --surface: #111318;
-      --surface2: #181c23;
-      --surface3: #1f2430;
-      --border: #2a2f3d;
-      --accent: #5b6af7;
-      --accent2: #38d9a9;
-      --accent3: #ff6b6b;
-      --accent4: #ffd43b;
-      --text: #e8eaf0;
-      --text2: #9099b2;
-      --text3: #5a6175;
-      --success: #38d9a9;
-      --error: #ff6b6b;
-      --warning: #ffd43b;
-      --mono: 'Space Mono', monospace;
-      --sans: 'DM Sans', sans-serif;
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+    <link rel="stylesheet" href="/css/main.css">
+  <!-- Add this to index.html <head> -->
+  <!-- Add this to index.html <head> section -->
+  <script>
+    // Global component registry
+    window.loadedComponents = {
+      geoAnalyzer: false,
+      geoReports: false,
+      llmConfig: false
+    };
+
+    // Component loader utility with better error handling
+    async function loadComponent(componentName, targetElementId) {
+      console.log(`Loading component: ${componentName}`);
+
+      try {
+        // Check if component already loaded
+        if (window.loadedComponents[componentName]) {
+          console.log(`${componentName} already loaded`);
+          return true;
+        }
+
+        // Load HTML
+        const response = await fetch(`/components/${componentName}.html`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const html = await response.text();
+        const targetElement = document.getElementById(targetElementId);
+
+        if (!targetElement) {
+          throw new Error(`Target element ${targetElementId} not found`);
+        }
+
+        targetElement.innerHTML = html;
+        console.log(`${componentName} HTML loaded`);
+
+        // Load corresponding JS
+        const script = document.createElement('script');
+        script.src = `/js/${componentName}.js`;
+        script.onload = () => {
+          console.log(`${componentName}.js loaded successfully`);
+          window.loadedComponents[componentName] = true;
+
+          // Call component-specific init if exists
+          const initFunc = window[`init${capitalize(componentName)}`];
+          if (typeof initFunc === 'function') {
+            console.log(`Calling init${capitalize(componentName)}`);
+            initFunc();
+          }
+        };
+        script.onerror = (err) => {
+          console.error(`Failed to load ${componentName}.js:`, err);
+          // Show error in panel
+          targetElement.innerHTML = `
+            <div class="alert alert-error" style="margin:20px">
+              Failed to load ${componentName} component. Please refresh the page.
+            </div>
+          `;
+        };
+
+        document.body.appendChild(script);
+        return true;
+
+      } catch (error) {
+        console.error(`Failed to load ${componentName}:`, error);
+        const targetElement = document.getElementById(targetElementId);
+        if (targetElement) {
+          targetElement.innerHTML = `
+            <div class="alert alert-error" style="margin:20px">
+              Error loading component: ${error.message}
+            </div>
+          `;
+        }
+        return false;
+      }
     }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--sans);
-      font-size: 14px;
-      min-height: 100vh;
-      overflow-x: hidden;
+    function capitalize(str) {
+      return str.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
     }
 
-    /* Grid noise overlay */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(91,106,247,0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(91,106,247,0.03) 1px, transparent 1px);
-      background-size: 40px 40px;
-      pointer-events: none;
-      z-index: 0;
+    // Pre-create panel containers
+    function initializePanels() {
+      const panelsContainer = document.querySelector('.content');
+      if (!panelsContainer) {
+        console.error('Content container not found');
+        return;
+      }
+
+      // Check if panels already exist
+      if (!document.getElementById('panel-geoAnalyzer')) {
+        const geoPanel = document.createElement('div');
+        geoPanel.id = 'panel-geoAnalyzer';
+        geoPanel.className = 'panel';
+        panelsContainer.appendChild(geoPanel);
+      }
+
+      if (!document.getElementById('panel-geoReport')) {
+        const reportsPanel = document.createElement('div');
+        reportsPanel.id = 'panel-geoReport';
+        reportsPanel.className = 'panel';
+        panelsContainer.appendChild(reportsPanel);
+      }
+
+      if (!document.getElementById('panel-llmConfig')) {
+        const llmPanel = document.createElement('div');
+        llmPanel.id = 'panel-llmConfig';
+        llmPanel.className = 'panel';
+        panelsContainer.appendChild(llmPanel);
+      }
     }
 
-    /* ─── Layout ─── */
-    .shell { display: flex; min-height: 100vh; position: relative; z-index: 1; }
+    // Override showPanel to load components on demand
+    function setupPanelLoader() {
+      const originalShowPanel = window.showPanel;
 
-    /* ─── Sidebar ─── */
-    .sidebar {
-      width: 240px;
-      background: var(--surface);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      top: 0; left: 0; bottom: 0;
-      z-index: 10;
-    }
+      window.showPanel = async function (panelId) {
+        console.log(`Showing panel: ${panelId}`);
 
-    .brand {
-      padding: 24px 20px 20px;
-      border-bottom: 1px solid var(--border);
-    }
-    .brand-logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 4px;
-    }
-    .brand-icon {
-      width: 32px; height: 32px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px;
-    }
-    .brand-name {
-      font-family: var(--mono);
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      color: var(--text);
-    }
-    .brand-tag {
-      font-size: 11px;
-      color: var(--text3);
-      font-family: var(--mono);
-    }
+        // Load component if needed
+        if (panelId === 'geoAnalyzer' && !window.loadedComponents.geoAnalyzer) {
+          await loadComponent('geo-analyzer', 'panel-geoAnalyzer');
+        } else if (panelId === 'geoReport' && !window.loadedComponents.geoReports) {
+          await loadComponent('geo-reports', 'panel-geoReport');
+        } else if (panelId === 'llmConfig' && !window.loadedComponents.llmConfig) {
+          await loadComponent('llm-config', 'panel-llmConfig');
+        }
 
-    .nav { flex: 1; padding: 16px 12px; }
-    .nav-section { margin-bottom: 20px; }
-    .nav-label {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text3);
-      padding: 0 8px;
-      margin-bottom: 6px;
-    }
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 9px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      color: var(--text2);
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 0.15s;
-      border: none;
-      background: none;
-      width: 100%;
-      text-align: left;
-    }
-    .nav-item:hover { background: var(--surface2); color: var(--text); }
-    .nav-item.active { background: rgba(91,106,247,0.15); color: var(--accent); }
-    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+        // Call original showPanel if it exists
+        if (typeof originalShowPanel === 'function') {
+          originalShowPanel(panelId);
+        } else {
+          // Fallback panel switching logic
+          document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+          const targetPanel = document.getElementById(`panel-${panelId}`);
+          if (targetPanel) targetPanel.classList.add('active');
 
-    .status-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      margin-left: auto;
-      background: var(--text3);
-    }
-    .status-dot.online { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
-    .status-dot.offline { background: var(--error); }
+          document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+          const activeNav = Array.from(document.querySelectorAll('.nav-item')).find(
+            b => b.getAttribute('onclick')?.includes(`'${panelId}'`)
+          );
+          if (activeNav) activeNav.classList.add('active');
 
-    .sidebar-footer {
-      padding: 16px;
-      border-top: 1px solid var(--border);
-    }
-    .conn-badge {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--text3);
-    }
-    .conn-badge .url { color: var(--text2); word-break: break-all; margin-top: 3px; }
-
-    /* ─── Main ─── */
-    .main {
-      margin-left: 240px;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
+          const titles = {
+            dashboard: 'Dashboard',
+            apply: 'Apply Schema',
+            read: 'Read Schema',
+            batch: 'Batch Apply',
+            config: 'Configuration',
+            log: 'Operation Log',
+            api: 'API Reference',
+            geoAnalyzer: 'GEO Analyzer',
+            geoReport: 'GEO Reports',
+            llmConfig: 'LLM Configuration'
+          };
+          const titleElem = document.getElementById('topbar-title');
+          if (titleElem) titleElem.textContent = titles[panelId] || panelId;
+        }
+      };
     }
 
-    .topbar {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 32px;
-      height: 60px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 5;
-    }
-    .page-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text);
-    }
-    .topbar-actions { display: flex; gap: 10px; align-items: center; }
+    // Initialize everything when DOM is ready
+    document.addEventListener('DOMContentLoaded', async () => {
+      console.log('DOM loaded, initializing panels...');
+      initializePanels();
+      setupPanelLoader();
 
-    .btn {
-      padding: 8px 16px;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      font-family: var(--sans);
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 0.15s;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .btn-primary {
-      background: var(--accent);
-      color: #fff;
-    }
-    .btn-primary:hover { background: #6f7ef9; transform: translateY(-1px); }
-    .btn-primary:active { transform: translateY(0); }
-    .btn-ghost {
-      background: transparent;
-      color: var(--text2);
-      border: 1px solid var(--border);
-    }
-    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-danger {
-      background: rgba(255,107,107,0.1);
-      color: var(--error);
-      border: 1px solid rgba(255,107,107,0.2);
-    }
-    .btn-danger:hover { background: rgba(255,107,107,0.2); }
-    .btn-success {
-      background: rgba(56,217,169,0.1);
-      color: var(--accent2);
-      border: 1px solid rgba(56,217,169,0.2);
-    }
-    .btn-success:hover { background: rgba(56,217,169,0.2); }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
-
-    /* ─── Content area ─── */
-    .content { padding: 32px; flex: 1; }
-
-    /* ─── Panels / Tabs ─── */
-    .panel { display: none; }
-    .panel.active { display: block; }
-
-    /* ─── Cards ─── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-    }
-    .card-header {
-      padding: 18px 24px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .card-title {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-    }
-    .card-body { padding: 24px; }
-
-    /* ─── Grid ─── */
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-
-    /* ─── Stats bar ─── */
-    .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-    }
-    .stat-label { font-size: 11px; color: var(--text3); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-    .stat-value { font-family: var(--mono); font-size: 28px; font-weight: 700; color: var(--text); margin: 8px 0 4px; }
-    .stat-sub { font-size: 11px; color: var(--text3); }
-    .stat-accent { color: var(--accent); }
-    .stat-success { color: var(--accent2); }
-    .stat-error { color: var(--error); }
-
-    /* ─── Form elements ─── */
-    .form-group { margin-bottom: 20px; }
-    .form-label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text2);
-      margin-bottom: 8px;
-      letter-spacing: 0.04em;
-    }
-    .form-input, .form-select {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-family: var(--sans);
-      font-size: 13px;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .form-input:focus, .form-select:focus { border-color: var(--accent); }
-    .form-input::placeholder { color: var(--text3); }
-    .form-input[type="password"] { font-family: var(--mono); letter-spacing: 0.1em; }
-
-    .editor-wrap {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .editor-toolbar {
-      padding: 8px 14px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--surface3);
-    }
-    .editor-lang {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--accent2);
-      margin-right: auto;
-    }
-    .editor-btn {
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 5px;
-      border: 1px solid var(--border);
-      background: var(--surface2);
-      color: var(--text2);
-      cursor: pointer;
-      font-family: var(--sans);
-      transition: all 0.1s;
-    }
-    .editor-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-    textarea.code-editor {
-      width: 100%;
-      min-height: 280px;
-      background: transparent;
-      border: none;
-      color: var(--accent2);
-      font-family: var(--mono);
-      font-size: 12px;
-      line-height: 1.7;
-      padding: 16px;
-      resize: vertical;
-      outline: none;
-    }
-
-    /* ─── Log table ─── */
-    .log-table { width: 100%; border-collapse: collapse; }
-    .log-table th {
-      text-align: left;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text3);
-      padding: 10px 16px;
-      border-bottom: 1px solid var(--border);
-    }
-    .log-table td {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-      color: var(--text2);
-    }
-    .log-table tr:last-child td { border-bottom: none; }
-    .log-table tr:hover td { background: var(--surface2); }
-    .log-table td:first-child { font-family: var(--mono); font-size: 11px; color: var(--text3); }
-    .log-table .path { font-family: var(--mono); font-size: 11px; color: var(--text); }
-    .log-table .type-badge {
-      background: rgba(91,106,247,0.15);
-      color: var(--accent);
-      padding: 3px 8px;
-      border-radius: 5px;
-      font-size: 11px;
-      font-family: var(--mono);
-    }
-    .badge-success { background: rgba(56,217,169,0.12); color: var(--accent2); border-radius: 5px; padding: 3px 8px; font-size: 11px; }
-    .badge-error { background: rgba(255,107,107,0.12); color: var(--error); border-radius: 5px; padding: 3px 8px; font-size: 11px; }
-
-    /* ─── Schema template picker ─── */
-    .template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
-    .template-card {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .template-card:hover { border-color: var(--accent); }
-    .template-card.selected { border-color: var(--accent); background: rgba(91,106,247,0.1); }
-    .template-icon { font-size: 22px; margin-bottom: 8px; }
-    .template-name { font-size: 12px; font-weight: 600; color: var(--text); }
-    .template-desc { font-size: 11px; color: var(--text3); margin-top: 3px; }
-
-    /* ─── Toast ─── */
-    .toast-zone {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .toast {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 18px;
-      min-width: 280px;
-      max-width: 380px;
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      animation: slideIn 0.25s ease;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    }
-    .toast.success { border-left: 3px solid var(--accent2); }
-    .toast.error { border-left: 3px solid var(--error); }
-    .toast.info { border-left: 3px solid var(--accent); }
-    .toast-icon { font-size: 18px; }
-    .toast-text { flex: 1; }
-    .toast-title { font-size: 13px; font-weight: 600; color: var(--text); }
-    .toast-msg { font-size: 12px; color: var(--text2); margin-top: 2px; }
-    @keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-
-    /* ─── Processing Modal ─── */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.75);
-      backdrop-filter: blur(6px);
-      z-index: 500;
-      align-items: center;
-      justify-content: center;
-    }
-    .modal-overlay.open { display: flex; }
-    .modal {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 40px;
-      text-align: center;
-      min-width: 360px;
-      max-width: 440px;
-      animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
-    }
-    @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
-    .aem-spinner {
-      width: 64px;
-      height: 64px;
-      margin: 0 auto 24px;
-      position: relative;
-    }
-    .aem-spinner::before, .aem-spinner::after {
-      content: '';
-      position: absolute;
-      border-radius: 50%;
-    }
-    .aem-spinner::before {
-      inset: 0;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      animation: spin 0.9s linear infinite;
-    }
-    .aem-spinner::after {
-      inset: 8px;
-      border: 3px solid transparent;
-      border-top-color: var(--accent2);
-      animation: spin 0.6s linear infinite reverse;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .modal-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
-    .modal-sub { font-size: 13px; color: var(--text2); margin-bottom: 24px; }
-
-    .progress-track {
-      background: var(--surface2);
-      border-radius: 99px;
-      height: 4px;
-      overflow: hidden;
-      margin-bottom: 20px;
-    }
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-      border-radius: 99px;
-      transition: width 0.4s ease;
-      width: 0%;
-    }
-
-    .step-list { text-align: left; }
-    .step-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 13px;
-      color: var(--text3);
-      transition: color 0.2s;
-    }
-    .step-item:last-child { border-bottom: none; }
-    .step-item.done { color: var(--accent2); }
-    .step-item.active { color: var(--text); }
-    .step-icon { width: 20px; text-align: center; font-size: 14px; }
-
-    /* ─── Alert ─── */
-    .alert {
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-    .alert-info { background: rgba(91,106,247,0.1); border: 1px solid rgba(91,106,247,0.2); color: var(--text2); }
-    .alert-error { background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.2); color: #ff9999; }
-
-    /* ─── Empty state ─── */
-    .empty-state {
-      text-align: center;
-      padding: 60px 20px;
-      color: var(--text3);
-    }
-    .empty-icon { font-size: 40px; margin-bottom: 12px; }
-    .empty-msg { font-size: 13px; }
-
-    /* ─── Divider ─── */
-    .divider { height: 1px; background: var(--border); margin: 24px 0; }
-
-    /* ─── Scrollbar ─── */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-    /* ─── Auth guard ─── */
-    .shell { opacity: 0; transition: opacity 0.4s ease; }
-    .shell.ready { opacity: 1; }
-    #auth-loader {
-      position: fixed; inset: 0; background: var(--bg);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 20px; z-index: 9999;
-    }
-    #auth-loader.gone { display: none; }
-    .auth-spinner { width: 48px; height: 48px; position: relative; }
-    .auth-spinner::before, .auth-spinner::after { content: ''; position: absolute; border-radius: 50%; }
-    .auth-spinner::before { inset: 0; border: 3px solid var(--border); border-top-color: var(--accent); animation: spin2 0.9s linear infinite; }
-    .auth-spinner::after { inset: 8px; border: 3px solid transparent; border-top-color: var(--accent2); animation: spin2 0.6s linear infinite reverse; }
-    @keyframes spin2 { to { transform: rotate(360deg); } }
-    .auth-label { font-family: var(--mono); font-size: 11px; color: var(--text3); letter-spacing: 0.1em; }
-    /* ─── User chip ─── */
-    .user-chip { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 99px; padding: 5px 14px 5px 8px; }
-    .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink:0; }
-    .user-info { display: flex; flex-direction: column; line-height: 1.3; }
-    .user-name { font-size: 12px; font-weight: 600; color: var(--text); }
-    .user-url { font-size: 10px; color: var(--text3); font-family: var(--mono); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .btn-logout { padding: 7px 14px; border-radius: 8px; border: 1px solid rgba(255,107,107,0.25); background: rgba(255,107,107,0.08); color: var(--error); cursor: pointer; font-family: var(--sans); font-size: 12px; font-weight: 500; transition: all 0.15s; display: inline-flex; align-items: center; gap: 5px; }
-    .btn-logout:hover { background: rgba(255,107,107,0.2); border-color: var(--error); }
-
-    /* ─── Responsive ─── */
-    @media (max-width: 900px) {
-      .grid-2 { grid-template-columns: 1fr; }
-      .template-grid { grid-template-columns: 1fr 1fr; }
-      .grid-3 { grid-template-columns: 1fr 1fr; }
-    }
-  </style>
+      // Removed auto-load to prevent conflicts - load on demand only
+      console.log('Panel loader ready. Components will load when clicked.');
+    });
+  </script>
 </head>
+
 <body>
-<div class="shell">
+  <div class="shell">
 
-  <!-- ─── Sidebar ─── -->
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-logo">
-        <div class="brand-icon">⬡</div>
-        <span class="brand-name">AEM SCHEMA</span>
-      </div>
-      <div class="brand-tag">JSON-LD Dashboard v1.0</div>
-    </div>
-
-    <nav class="nav">
-      <div class="nav-section">
-        <div class="nav-label">Overview</div>
-        <button class="nav-item active" onclick="showPanel('dashboard')">
-          <span class="icon">◈</span> Dashboard
-          <span class="status-dot" id="conn-dot"></span>
-        </button>
-      </div>
-      <div class="nav-section">
-        <div class="nav-label">Schema</div>
-        <button class="nav-item" onclick="showPanel('apply')">
-          <span class="icon">⊕</span> Apply Schema
-        </button>
-        <button class="nav-item" onclick="showPanel('read')">
-          <span class="icon">⊙</span> Read Schema
-        </button>
-        <button class="nav-item" onclick="showPanel('batch')">
-          <span class="icon">≡</span> Batch Apply
-        </button>
-      </div>
-      <div class="nav-section">
-        <div class="nav-label">System</div>
-        <button class="nav-item" onclick="showPanel('config')">
-          <span class="icon">⚙</span> Configuration
-        </button>
-        <button class="nav-item" onclick="showPanel('log')">
-          <span class="icon">⊟</span> Operation Log
-        </button>
-        <button class="nav-item" onclick="showPanel('api')">
-          <span class="icon">⟨⟩</span> API Reference
-        </button>
-      </div>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="conn-badge">
-        <div style="color:var(--text3)">Connected to</div>
-        <div class="url" id="sidebar-url">Not configured</div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- ─── Main ─── -->
-  <main class="main">
-    <div class="topbar">
-      <div class="page-title" id="topbar-title">Dashboard</div>
-      <div class="topbar-actions">
-        <button class="btn btn-ghost" onclick="testConnection()">⚡ Test AEM</button>
-        <button class="btn btn-primary" onclick="showPanel('apply')">+ Apply Schema</button>
-        <div class="user-chip" id="user-chip">
-          <div class="user-avatar" id="user-avatar">?</div>
-          <div class="user-info">
-            <div class="user-name" id="user-display-name">—</div>
-            <div class="user-url" id="user-display-url">—</div>
-          </div>
+    <!-- ─── Sidebar ─── -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <div class="brand-icon">⬡</div>
+          <span class="brand-name">AEM SCHEMA</span>
         </div>
-        <button class="btn-logout" onclick="doLogout()">⎋ Sign Out</button>
+        <div class="brand-tag">JSON-LD Dashboard v1.0</div>
       </div>
-    </div>
 
-    <div class="content">
-
-      <!-- ─── Dashboard Panel ─── -->
-      <div class="panel active" id="panel-dashboard">
-        <div class="grid-3" style="margin-bottom:24px">
-          <div class="stat-card">
-            <div class="stat-label">Total Applied</div>
-            <div class="stat-value stat-accent" id="stat-total">—</div>
-            <div class="stat-sub">JSON-LD schemas pushed to AEM</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Succeeded</div>
-            <div class="stat-value stat-success" id="stat-success">—</div>
-            <div class="stat-sub">Operations completed</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Failed</div>
-            <div class="stat-value stat-error" id="stat-fail">—</div>
-            <div class="stat-sub">Errors requiring attention</div>
-          </div>
+      <nav class="nav">
+        <div class="nav-section">
+          <div class="nav-label">Overview</div>
+          <button class="nav-item active" onclick="showPanel('dashboard')">
+            <span class="icon">◈</span> Dashboard
+            <span class="status-dot" id="conn-dot"></span>
+          </button>
         </div>
+        <div class="nav-section">
+          <div class="nav-label">Schema</div>
+          <button class="nav-item" onclick="showPanel('apply')">
+            <span class="icon">⊕</span> Apply Schema
+          </button>
+          <button class="nav-item" onclick="showPanel('read')">
+            <span class="icon">⊙</span> Read Schema
+          </button>
+          <button class="nav-item" onclick="showPanel('batch')">
+            <span class="icon">≡</span> Batch Apply
+          </button>
+        </div>
+        <div class="nav-section">
+          <div class="nav-label">System</div>
+          <button class="nav-item" onclick="showPanel('config')">
+            <span class="icon">⚙</span> Configuration
+          </button>
+          <button class="nav-item" onclick="showPanel('log')">
+            <span class="icon">⊟</span> Operation Log
+          </button>
+          <button class="nav-item" onclick="showPanel('api')">
+            <span class="icon">⟨⟩</span> API Reference
+          </button>
+        </div>
+        <!-- Add to sidebar nav -->
+        <div class="nav-section">
+          <div class="nav-label">GEO Intelligence</div>
+          <button class="nav-item" onclick="showPanel('geoAnalyzer')">
+            <span class="icon">🌍</span> GEO Analyzer
+          </button>
+          <button class="nav-item" onclick="showPanel('geoReport')">
+            <span class="icon">📊</span> GEO Reports
+          </button>
+        </div>
+        <div class="nav-section">
+          <div class="nav-label">AI Integration</div>
+          <button class="nav-item" onclick="showPanel('llmConfig')">
+            <span class="icon">🤖</span> LLM Configuration
+          </button>
+        </div>
+      </nav>
 
-        <div class="grid-2">
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">AEM Connection</div>
-              <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px" onclick="testConnection()">Recheck</button>
+      <div class="sidebar-footer">
+        <div class="conn-badge">
+          <div style="color:var(--text3)">Connected to</div>
+          <div class="url" id="sidebar-url">Not configured</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ─── Main ─── -->
+    <main class="main">
+      <div class="topbar">
+        <div class="page-title" id="topbar-title">Dashboard</div>
+        <div class="topbar-actions">
+          <button class="btn btn-ghost" onclick="testConnection()">⚡ Test AEM</button>
+          <button class="btn btn-primary" onclick="showPanel('apply')">+ Apply Schema</button>
+          <div class="user-chip" id="user-chip">
+            <div class="user-avatar" id="user-avatar">?</div>
+            <div class="user-info">
+              <div class="user-name" id="user-display-name">—</div>
+              <div class="user-url" id="user-display-url">—</div>
             </div>
-            <div class="card-body">
-              <div id="conn-status" style="font-size:13px;color:var(--text2);font-family:var(--mono)">Checking connection...</div>
+          </div>
+          <button class="btn-logout" onclick="doLogout()">⎋ Sign Out</button>
+        </div>
+      </div>
+
+      <div class="content">
+
+        <!-- ─── Dashboard Panel ─── -->
+        <div class="panel active" id="panel-dashboard">
+          <div class="grid-3" style="margin-bottom:24px">
+            <div class="stat-card">
+              <div class="stat-label">Total Applied</div>
+              <div class="stat-value stat-accent" id="stat-total">—</div>
+              <div class="stat-sub">JSON-LD schemas pushed to AEM</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Succeeded</div>
+              <div class="stat-value stat-success" id="stat-success">—</div>
+              <div class="stat-sub">Operations completed</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Failed</div>
+              <div class="stat-value stat-error" id="stat-fail">—</div>
+              <div class="stat-sub">Errors requiring attention</div>
             </div>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">Recent Operations</div>
-              <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px" onclick="showPanel('log')">View All</button>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">AEM Connection</div>
+                <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px"
+                  onclick="testConnection()">Recheck</button>
+              </div>
+              <div class="card-body">
+                <div id="conn-status" style="font-size:13px;color:var(--text2);font-family:var(--mono)">Checking
+                  connection...</div>
+              </div>
             </div>
-            <div class="card-body" style="padding:0">
-              <div id="recent-log">
-                <div class="empty-state" style="padding:30px">
-                  <div class="empty-icon">◌</div>
-                  <div class="empty-msg">No operations yet</div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Recent Operations</div>
+                <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px" onclick="showPanel('log')">View
+                  All</button>
+              </div>
+              <div class="card-body" style="padding:0">
+                <div id="recent-log">
+                  <div class="empty-state" style="padding:30px">
+                    <div class="empty-icon">◌</div>
+                    <div class="empty-msg">No operations yet</div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- ─── Apply Schema Panel ─── -->
-      <div class="panel" id="panel-apply">
-        <div class="grid-2">
-          <div>
-            <div class="card" style="margin-bottom:20px">
-              <div class="card-header">
-                <div class="card-title">Schema Templates</div>
+        <!-- ─── Apply Schema Panel ─── -->
+        <div class="panel" id="panel-apply">
+          <div class="grid-2">
+            <div>
+              <div class="card" style="margin-bottom:20px">
+                <div class="card-header">
+                  <div class="card-title">Schema Templates</div>
+                </div>
+                <div class="card-body" style="padding-bottom:4px">
+                  <div class="template-grid">
+                    <div class="template-card selected" onclick="loadTemplate('webpage',this)">
+                      <div class="template-icon">🌐</div>
+                      <div class="template-name">WebPage</div>
+                      <div class="template-desc">General web page</div>
+                    </div>
+                    <div class="template-card" onclick="loadTemplate('article',this)">
+                      <div class="template-icon">📄</div>
+                      <div class="template-name">Article</div>
+                      <div class="template-desc">News & blog posts</div>
+                    </div>
+                    <div class="template-card" onclick="loadTemplate('product',this)">
+                      <div class="template-icon">📦</div>
+                      <div class="template-name">Product</div>
+                      <div class="template-desc">E-commerce product</div>
+                    </div>
+                    <div class="template-card" onclick="loadTemplate('organization',this)">
+                      <div class="template-icon">🏢</div>
+                      <div class="template-name">Organization</div>
+                      <div class="template-desc">Company / org</div>
+                    </div>
+                    <div class="template-card" onclick="loadTemplate('faq',this)">
+                      <div class="template-icon">❓</div>
+                      <div class="template-name">FAQPage</div>
+                      <div class="template-desc">FAQ structured data</div>
+                    </div>
+                    <div class="template-card" onclick="loadTemplate('event',this)">
+                      <div class="template-icon">📅</div>
+                      <div class="template-name">Event</div>
+                      <div class="template-desc">Event schema</div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="card-body" style="padding-bottom:4px">
-                <div class="template-grid">
-                  <div class="template-card selected" onclick="loadTemplate('webpage',this)">
-                    <div class="template-icon">🌐</div>
-                    <div class="template-name">WebPage</div>
-                    <div class="template-desc">General web page</div>
+
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">Page Path</div>
+                </div>
+                <div class="card-body">
+                  <div class="form-group">
+                    <label class="form-label">AEM Page Path</label>
+                    <input class="form-input" id="apply-path" placeholder="/content/mysite/en/home" type="text" />
                   </div>
-                  <div class="template-card" onclick="loadTemplate('article',this)">
-                    <div class="template-icon">📄</div>
-                    <div class="template-name">Article</div>
-                    <div class="template-desc">News & blog posts</div>
-                  </div>
-                  <div class="template-card" onclick="loadTemplate('product',this)">
-                    <div class="template-icon">📦</div>
-                    <div class="template-name">Product</div>
-                    <div class="template-desc">E-commerce product</div>
-                  </div>
-                  <div class="template-card" onclick="loadTemplate('organization',this)">
-                    <div class="template-icon">🏢</div>
-                    <div class="template-name">Organization</div>
-                    <div class="template-desc">Company / org</div>
-                  </div>
-                  <div class="template-card" onclick="loadTemplate('faq',this)">
-                    <div class="template-icon">❓</div>
-                    <div class="template-name">FAQPage</div>
-                    <div class="template-desc">FAQ structured data</div>
-                  </div>
-                  <div class="template-card" onclick="loadTemplate('event',this)">
-                    <div class="template-icon">📅</div>
-                    <div class="template-name">Event</div>
-                    <div class="template-desc">Event schema</div>
+                  <div style="display:flex;gap:10px">
+                    <button class="btn btn-primary" style="flex:1" onclick="applySchema()">⊕ Apply Schema to
+                      AEM</button>
+                    <button class="btn btn-ghost" onclick="validateJson()">✓ Validate</button>
                   </div>
                 </div>
               </div>
@@ -731,536 +390,531 @@
 
             <div class="card">
               <div class="card-header">
-                <div class="card-title">Page Path</div>
+                <div class="card-title">JSON-LD Schema Editor</div>
               </div>
-              <div class="card-body">
-                <div class="form-group">
-                  <label class="form-label">AEM Page Path</label>
-                  <input class="form-input" id="apply-path" placeholder="/content/mysite/en/home" type="text" />
+              <div class="card-body" style="padding:0">
+                <div class="editor-wrap" style="border:none;border-radius:0">
+                  <div class="editor-toolbar">
+                    <span class="editor-lang">JSON-LD</span>
+                    <button class="editor-btn" onclick="formatJson()">Format</button>
+                    <button class="editor-btn" onclick="clearEditor()">Clear</button>
+                    <button class="editor-btn" onclick="copyEditor()">Copy</button>
+                  </div>
+                  <textarea class="code-editor" id="schema-editor" spellcheck="false"></textarea>
                 </div>
-                <div style="display:flex;gap:10px">
-                  <button class="btn btn-primary" style="flex:1" onclick="applySchema()">⊕ Apply Schema to AEM</button>
-                  <button class="btn btn-ghost" onclick="validateJson()">✓ Validate</button>
-                </div>
+                <div id="validation-msg" style="padding:12px 16px;display:none"></div>
               </div>
             </div>
           </div>
+        </div>
 
+        <!-- ─── Read Schema Panel ─── -->
+        <div class="panel" id="panel-read">
           <div class="card">
             <div class="card-header">
-              <div class="card-title">JSON-LD Schema Editor</div>
+              <div class="card-title">Read Schema from AEM Page</div>
             </div>
-            <div class="card-body" style="padding:0">
-              <div class="editor-wrap" style="border:none;border-radius:0">
+            <div class="card-body">
+              <div class="grid-2">
+                <div>
+                  <div class="form-group">
+                    <label class="form-label">AEM Page Path</label>
+                    <input class="form-input" id="read-path" placeholder="/content/mysite/en/home" type="text" />
+                  </div>
+                  <button class="btn btn-primary" onclick="readSchema()">⊙ Fetch Schema</button>
+                </div>
+                <div id="read-meta" style="font-size:12px;color:var(--text3)"></div>
+              </div>
+              <div class="divider"></div>
+              <div class="editor-wrap">
                 <div class="editor-toolbar">
-                  <span class="editor-lang">JSON-LD</span>
-                  <button class="editor-btn" onclick="formatJson()">Format</button>
-                  <button class="editor-btn" onclick="clearEditor()">Clear</button>
-                  <button class="editor-btn" onclick="copyEditor()">Copy</button>
+                  <span class="editor-lang">JSON-LD (read-only)</span>
+                  <button class="editor-btn" onclick="copyResult()">Copy</button>
+                  <button class="editor-btn" onclick="sendToEditor()">→ Send to Editor</button>
                 </div>
-                <textarea class="code-editor" id="schema-editor" spellcheck="false"></textarea>
+                <textarea class="code-editor" id="read-result" spellcheck="false" readonly
+                  placeholder="// Schema will appear here after fetching..."></textarea>
               </div>
-              <div id="validation-msg" style="padding:12px 16px;display:none"></div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- ─── Read Schema Panel ─── -->
-      <div class="panel" id="panel-read">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Read Schema from AEM Page</div>
-          </div>
-          <div class="card-body">
-            <div class="grid-2">
-              <div>
-                <div class="form-group">
-                  <label class="form-label">AEM Page Path</label>
-                  <input class="form-input" id="read-path" placeholder="/content/mysite/en/home" type="text" />
+        <!-- ─── Batch Panel ─── -->
+        <div class="panel" id="panel-batch">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Batch Schema Application</div>
+            </div>
+            <div class="card-body">
+              <div class="alert alert-info">
+                <span>ℹ</span>
+                <div>Paste a JSON array of <code
+                    style="font-family:var(--mono);font-size:11px">{ pagePath, schema }</code> objects. All pages will
+                  be updated sequentially.</div>
+              </div>
+              <div class="editor-wrap">
+                <div class="editor-toolbar">
+                  <span class="editor-lang">JSON Array</span>
+                  <button class="editor-btn" onclick="loadBatchExample()">Load Example</button>
+                  <button class="editor-btn" onclick="formatBatch()">Format</button>
                 </div>
-                <button class="btn btn-primary" onclick="readSchema()">⊙ Fetch Schema</button>
-              </div>
-              <div id="read-meta" style="font-size:12px;color:var(--text3)"></div>
-            </div>
-            <div class="divider"></div>
-            <div class="editor-wrap">
-              <div class="editor-toolbar">
-                <span class="editor-lang">JSON-LD (read-only)</span>
-                <button class="editor-btn" onclick="copyResult()">Copy</button>
-                <button class="editor-btn" onclick="sendToEditor()">→ Send to Editor</button>
-              </div>
-              <textarea class="code-editor" id="read-result" spellcheck="false" readonly placeholder="// Schema will appear here after fetching..."></textarea>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ─── Batch Panel ─── -->
-      <div class="panel" id="panel-batch">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Batch Schema Application</div>
-          </div>
-          <div class="card-body">
-            <div class="alert alert-info">
-              <span>ℹ</span>
-              <div>Paste a JSON array of <code style="font-family:var(--mono);font-size:11px">{ pagePath, schema }</code> objects. All pages will be updated sequentially.</div>
-            </div>
-            <div class="editor-wrap">
-              <div class="editor-toolbar">
-                <span class="editor-lang">JSON Array</span>
-                <button class="editor-btn" onclick="loadBatchExample()">Load Example</button>
-                <button class="editor-btn" onclick="formatBatch()">Format</button>
-              </div>
-              <textarea class="code-editor" id="batch-editor" spellcheck="false" style="min-height:320px" placeholder='[
+                <textarea class="code-editor" id="batch-editor" spellcheck="false" style="min-height:320px" placeholder='[
   {
     "pagePath": "/content/mysite/en/home",
     "schema": { "@context": "https://schema.org", "@type": "WebPage", "name": "Home" }
   }
 ]'></textarea>
+              </div>
+              <div style="margin-top:16px;display:flex;gap:10px">
+                <button class="btn btn-primary" onclick="applyBatch()">⊕ Apply Batch</button>
+                <button class="btn btn-ghost" onclick="document.getElementById('batch-editor').value=''">Clear</button>
+              </div>
+              <div id="batch-results" style="margin-top:20px"></div>
             </div>
-            <div style="margin-top:16px;display:flex;gap:10px">
-              <button class="btn btn-primary" onclick="applyBatch()">⊕ Apply Batch</button>
-              <button class="btn btn-ghost" onclick="document.getElementById('batch-editor').value=''">Clear</button>
-            </div>
-            <div id="batch-results" style="margin-top:20px"></div>
           </div>
         </div>
-      </div>
 
-      <!-- ─── Config Panel ─── -->
-      <div class="panel" id="panel-config">
-        <div class="grid-2">
+        <!-- ─── Config Panel ─── -->
+        <div class="panel" id="panel-config">
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">AEM Connection Settings</div>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label class="form-label">AEM Author Base URL</label>
+                  <input class="form-input" id="cfg-url" placeholder="https://author-p00000-e000000.adobeaemcloud.com"
+                    type="url" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Username</label>
+                  <input class="form-input" id="cfg-user" placeholder="admin" type="text" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Password</label>
+                  <input class="form-input" id="cfg-pass" placeholder="••••••••" type="password" />
+                </div>
+                <div style="display:flex;gap:10px">
+                  <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
+                  <button class="btn btn-ghost" onclick="testConnection()">Test Connection</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Current Status</div>
+              </div>
+              <div class="card-body">
+                <div id="cfg-status" style="font-family:var(--mono);font-size:12px;color:var(--text2);line-height:1.8">
+                  Loading...</div>
+                <div class="divider"></div>
+                <div style="font-size:12px;color:var(--text3)">
+                  <strong style="color:var(--text2)">Note:</strong> Credentials are stored in the server process memory
+                  or <code style="font-family:var(--mono);font-size:11px">.env</code> file. They are never sent to the
+                  browser.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── Log Panel ─── -->
+        <div class="panel" id="panel-log">
           <div class="card">
             <div class="card-header">
-              <div class="card-title">AEM Connection Settings</div>
+              <div class="card-title">Operation Log</div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px" onclick="loadLog()">↻
+                  Refresh</button>
+                <button class="btn btn-danger" style="font-size:12px;padding:6px 12px"
+                  onclick="clearLog()">Clear</button>
+              </div>
             </div>
-            <div class="card-body">
-              <div class="form-group">
-                <label class="form-label">AEM Author Base URL</label>
-                <input class="form-input" id="cfg-url" placeholder="https://author-p00000-e000000.adobeaemcloud.com" type="url" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Username</label>
-                <input class="form-input" id="cfg-user" placeholder="admin" type="text" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Password</label>
-                <input class="form-input" id="cfg-pass" placeholder="••••••••" type="password" />
-              </div>
-              <div style="display:flex;gap:10px">
-                <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
-                <button class="btn btn-ghost" onclick="testConnection()">Test Connection</button>
+            <div class="card-body" style="padding:0">
+              <div id="log-table-wrap">
+                <div class="empty-state">
+                  <div class="empty-icon">◌</div>
+                  <div class="empty-msg">No operations logged</div>
+                </div>
               </div>
             </div>
           </div>
+        </div>
 
+        <!-- ─── API Panel ─── -->
+        <div class="panel" id="panel-api">
           <div class="card">
             <div class="card-header">
-              <div class="card-title">Current Status</div>
+              <div class="card-title">API Reference</div>
             </div>
             <div class="card-body">
-              <div id="cfg-status" style="font-family:var(--mono);font-size:12px;color:var(--text2);line-height:1.8">Loading...</div>
-              <div class="divider"></div>
-              <div style="font-size:12px;color:var(--text3)">
-                <strong style="color:var(--text2)">Note:</strong> Credentials are stored in the server process memory or <code style="font-family:var(--mono);font-size:11px">.env</code> file. They are never sent to the browser.
+              <div id="api-docs" style="font-family:var(--mono);font-size:12px;line-height:2;color:var(--text2)">
+                <!-- Populated by JS -->
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- ─── Log Panel ─── -->
-      <div class="panel" id="panel-log">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Operation Log</div>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px" onclick="loadLog()">↻ Refresh</button>
-              <button class="btn btn-danger" style="font-size:12px;padding:6px 12px" onclick="clearLog()">Clear</button>
-            </div>
-          </div>
-          <div class="card-body" style="padding:0">
-            <div id="log-table-wrap">
-              <div class="empty-state"><div class="empty-icon">◌</div><div class="empty-msg">No operations logged</div></div>
-            </div>
-          </div>
+      </div><!-- /content -->
+    </main>
+
+  </div><!-- /shell -->
+
+  <!-- ─── Processing Modal ─── -->
+  <div class="modal-overlay" id="processing-modal">
+    <div class="modal">
+      <div class="aem-spinner"></div>
+      <div class="modal-title" id="modal-title">Applying Schema to AEM</div>
+      <div class="modal-sub" id="modal-sub">Please wait while we update the page properties...</div>
+      <div class="progress-track">
+        <div class="progress-fill" id="modal-progress"></div>
+      </div>
+      <div class="step-list" id="modal-steps">
+        <div class="step-item" id="step-validate">
+          <span class="step-icon">○</span> Validating JSON-LD schema
         </div>
-      </div>
-
-      <!-- ─── API Panel ─── -->
-      <div class="panel" id="panel-api">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">API Reference</div>
-          </div>
-          <div class="card-body">
-            <div id="api-docs" style="font-family:var(--mono);font-size:12px;line-height:2;color:var(--text2)">
-              <!-- Populated by JS -->
-            </div>
-          </div>
+        <div class="step-item" id="step-connect">
+          <span class="step-icon">○</span> Connecting to AEM Author
         </div>
-      </div>
-
-    </div><!-- /content -->
-  </main>
-
-</div><!-- /shell -->
-
-<!-- ─── Processing Modal ─── -->
-<div class="modal-overlay" id="processing-modal">
-  <div class="modal">
-    <div class="aem-spinner"></div>
-    <div class="modal-title" id="modal-title">Applying Schema to AEM</div>
-    <div class="modal-sub" id="modal-sub">Please wait while we update the page properties...</div>
-    <div class="progress-track">
-      <div class="progress-fill" id="modal-progress"></div>
-    </div>
-    <div class="step-list" id="modal-steps">
-      <div class="step-item" id="step-validate">
-        <span class="step-icon">○</span> Validating JSON-LD schema
-      </div>
-      <div class="step-item" id="step-connect">
-        <span class="step-icon">○</span> Connecting to AEM Author
-      </div>
-      <div class="step-item" id="step-auth">
-        <span class="step-icon">○</span> Authenticating with Basic Auth
-      </div>
-      <div class="step-item" id="step-post">
-        <span class="step-icon">○</span> POSTing to Sling servlet (jcr:content)
-      </div>
-      <div class="step-item" id="step-verify">
-        <span class="step-icon">○</span> Verifying page properties updated
+        <div class="step-item" id="step-auth">
+          <span class="step-icon">○</span> Authenticating with Basic Auth
+        </div>
+        <div class="step-item" id="step-post">
+          <span class="step-icon">○</span> POSTing to Sling servlet (jcr:content)
+        </div>
+        <div class="step-item" id="step-verify">
+          <span class="step-icon">○</span> Verifying page properties updated
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<!-- ─── Toast Zone ─── -->
-<div class="toast-zone" id="toast-zone"></div>
+  <!-- ─── Toast Zone ─── -->
+  <div class="toast-zone" id="toast-zone"></div>
 
-<script>
-// ─────────────────────────────────────────────
-// State
-// ─────────────────────────────────────────────
-const state = { stats: { total: 0, success: 0, fail: 0 } };
+  <script>
+    // ─────────────────────────────────────────────
+    // State
+    // ─────────────────────────────────────────────
+    const state = { stats: { total: 0, success: 0, fail: 0 } };
 
-// ─────────────────────────────────────────────
-// Panel navigation
-// ─────────────────────────────────────────────
-const panelTitles = {
-  dashboard: 'Dashboard',
-  apply: 'Apply Schema',
-  read: 'Read Schema',
-  batch: 'Batch Apply',
-  config: 'Configuration',
-  log: 'Operation Log',
-  api: 'API Reference'
-};
+    // ─────────────────────────────────────────────
+    // Panel navigation
+    // ─────────────────────────────────────────────
+    const panelTitles = {
+      dashboard: 'Dashboard',
+      apply: 'Apply Schema',
+      read: 'Read Schema',
+      batch: 'Batch Apply',
+      config: 'Configuration',
+      log: 'Operation Log',
+      api: 'API Reference'
+    };
 
-function showPanel(id) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  document.getElementById('panel-' + id).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(b => {
-    if (b.getAttribute('onclick')?.includes(`'${id}'`)) b.classList.add('active');
-  });
-  document.getElementById('topbar-title').textContent = panelTitles[id] || id;
-  if (id === 'log') loadLog();
-  if (id === 'config') loadConfigStatus();
-  if (id === 'dashboard') { loadDashboard(); loadLog(3); }
-  if (id === 'api') renderApiDocs();
-}
+    function showPanel(id) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      document.getElementById('panel-' + id).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(b => {
+        if (b.getAttribute('onclick')?.includes(`'${id}'`)) b.classList.add('active');
+      });
+      document.getElementById('topbar-title').textContent = panelTitles[id] || id;
+      if (id === 'log') loadLog();
+      if (id === 'config') loadConfigStatus();
+      if (id === 'dashboard') { loadDashboard(); loadLog(3); }
+      if (id === 'api') renderApiDocs();
+    }
 
-// ─────────────────────────────────────────────
-// Processing Modal
-// ─────────────────────────────────────────────
-const steps = ['validate','connect','auth','post','verify'];
-let stepTimer = null;
+    // ─────────────────────────────────────────────
+    // Processing Modal
+    // ─────────────────────────────────────────────
+    const steps = ['validate', 'connect', 'auth', 'post', 'verify'];
+    let stepTimer = null;
 
-function openModal(title, sub) {
-  document.getElementById('modal-title').textContent = title || 'Processing…';
-  document.getElementById('modal-sub').textContent = sub || 'Please wait…';
-  document.getElementById('modal-progress').style.width = '0%';
-  steps.forEach(s => {
-    const el = document.getElementById('step-' + s);
-    el.className = 'step-item';
-    el.querySelector('.step-icon').textContent = '○';
-  });
-  document.getElementById('processing-modal').classList.add('open');
-}
+    function openModal(title, sub) {
+      document.getElementById('modal-title').textContent = title || 'Processing…';
+      document.getElementById('modal-sub').textContent = sub || 'Please wait…';
+      document.getElementById('modal-progress').style.width = '0%';
+      steps.forEach(s => {
+        const el = document.getElementById('step-' + s);
+        el.className = 'step-item';
+        el.querySelector('.step-icon').textContent = '○';
+      });
+      document.getElementById('processing-modal').classList.add('open');
+    }
 
-function advanceStep(index) {
-  if (index > 0) {
-    const prev = document.getElementById('step-' + steps[index - 1]);
-    prev.classList.add('done');
-    prev.querySelector('.step-icon').textContent = '✓';
-  }
-  if (index < steps.length) {
-    const cur = document.getElementById('step-' + steps[index]);
-    cur.classList.add('active');
-    cur.querySelector('.step-icon').textContent = '◉';
-  }
-  const pct = Math.round((index / steps.length) * 100);
-  document.getElementById('modal-progress').style.width = pct + '%';
-}
+    function advanceStep(index) {
+      if (index > 0) {
+        const prev = document.getElementById('step-' + steps[index - 1]);
+        prev.classList.add('done');
+        prev.querySelector('.step-icon').textContent = '✓';
+      }
+      if (index < steps.length) {
+        const cur = document.getElementById('step-' + steps[index]);
+        cur.classList.add('active');
+        cur.querySelector('.step-icon').textContent = '◉';
+      }
+      const pct = Math.round((index / steps.length) * 100);
+      document.getElementById('modal-progress').style.width = pct + '%';
+    }
 
-function closeModal(success) {
-  if (success) {
-    steps.forEach(s => {
-      const el = document.getElementById('step-' + s);
-      el.classList.add('done');
-      el.querySelector('.step-icon').textContent = '✓';
-    });
-    document.getElementById('modal-progress').style.width = '100%';
-  }
-  setTimeout(() => {
-    document.getElementById('processing-modal').classList.remove('open');
-  }, success ? 800 : 200);
-}
+    function closeModal(success) {
+      if (success) {
+        steps.forEach(s => {
+          const el = document.getElementById('step-' + s);
+          el.classList.add('done');
+          el.querySelector('.step-icon').textContent = '✓';
+        });
+        document.getElementById('modal-progress').style.width = '100%';
+      }
+      setTimeout(() => {
+        document.getElementById('processing-modal').classList.remove('open');
+      }, success ? 800 : 200);
+    }
 
-// Animated step progression (fake UX timing during real API call)
-function startStepAnimation(realCallPromise) {
-  const delays = [0, 300, 700, 1200, 1800];
-  delays.forEach((d, i) => setTimeout(() => advanceStep(i), d));
-  return realCallPromise;
-}
+    // Animated step progression (fake UX timing during real API call)
+    function startStepAnimation(realCallPromise) {
+      const delays = [0, 300, 700, 1200, 1800];
+      delays.forEach((d, i) => setTimeout(() => advanceStep(i), d));
+      return realCallPromise;
+    }
 
-// ─────────────────────────────────────────────
-// Toast notifications
-// ─────────────────────────────────────────────
-function toast(type, title, msg) {
-  const icons = { success: '✓', error: '✕', info: 'ℹ' };
-  const zone = document.getElementById('toast-zone');
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.innerHTML = `
+    // ─────────────────────────────────────────────
+    // Toast notifications
+    // ─────────────────────────────────────────────
+    function toast(type, title, msg) {
+      const icons = { success: '✓', error: '✕', info: 'ℹ' };
+      const zone = document.getElementById('toast-zone');
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.innerHTML = `
     <div class="toast-icon">${icons[type] || 'ℹ'}</div>
     <div class="toast-text">
       <div class="toast-title">${title}</div>
       ${msg ? `<div class="toast-msg">${msg}</div>` : ''}
     </div>
   `;
-  zone.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
-}
+      zone.appendChild(el);
+      setTimeout(() => el.remove(), 4000);
+    }
 
-// ─────────────────────────────────────────────
-// API helpers
-// ─────────────────────────────────────────────
-async function api(method, path, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
-  if (body) opts.body = JSON.stringify(body);
-  const res = await fetch('/api' + path, opts);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
-}
+    // ─────────────────────────────────────────────
+    // API helpers
+    // ─────────────────────────────────────────────
+    async function api(method, path, body) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch('/api' + path, opts);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
 
-// ─────────────────────────────────────────────
-// Connection test
-// ─────────────────────────────────────────────
-async function testConnection() {
-  document.getElementById('conn-status').textContent = 'Testing...';
-  document.getElementById('conn-dot').className = 'status-dot';
-  try {
-    const data = await api('GET', '/aem/verify');
-    if (data.success) {
-      document.getElementById('conn-dot').className = 'status-dot online';
-      document.getElementById('conn-status').innerHTML = `
+    // ─────────────────────────────────────────────
+    // Connection test
+    // ─────────────────────────────────────────────
+    async function testConnection() {
+      document.getElementById('conn-status').textContent = 'Testing...';
+      document.getElementById('conn-dot').className = 'status-dot';
+      try {
+        const data = await api('GET', '/aem/verify');
+        if (data.success) {
+          document.getElementById('conn-dot').className = 'status-dot online';
+          document.getElementById('conn-status').innerHTML = `
         <span style="color:var(--accent2)">● Connected</span><br>
         <span style="color:var(--text3)">AEM HTTP ${data.status} — ${data.aemUrl}</span>
       `;
-      toast('success', 'AEM Connected', data.message);
-    } else {
-      document.getElementById('conn-dot').className = 'status-dot offline';
-      document.getElementById('conn-status').innerHTML = `<span style="color:var(--error)">✕ ${data.message}</span>`;
-      toast('error', 'Connection Failed', data.message);
+          toast('success', 'AEM Connected', data.message);
+        } else {
+          document.getElementById('conn-dot').className = 'status-dot offline';
+          document.getElementById('conn-status').innerHTML = `<span style="color:var(--error)">✕ ${data.message}</span>`;
+          toast('error', 'Connection Failed', data.message);
+        }
+      } catch (e) {
+        document.getElementById('conn-dot').className = 'status-dot offline';
+        document.getElementById('conn-status').innerHTML = `<span style="color:var(--error)">✕ ${e.message}</span>`;
+        toast('error', 'Connection Error', e.message);
+      }
     }
-  } catch (e) {
-    document.getElementById('conn-dot').className = 'status-dot offline';
-    document.getElementById('conn-status').innerHTML = `<span style="color:var(--error)">✕ ${e.message}</span>`;
-    toast('error', 'Connection Error', e.message);
-  }
-}
 
-// ─────────────────────────────────────────────
-// Apply Schema
-// ─────────────────────────────────────────────
-async function applySchema() {
-  const pagePath = document.getElementById('apply-path').value.trim();
-  const rawSchema = document.getElementById('schema-editor').value.trim();
+    // ─────────────────────────────────────────────
+    // Apply Schema
+    // ─────────────────────────────────────────────
+    async function applySchema() {
+      const pagePath = document.getElementById('apply-path').value.trim();
+      const rawSchema = document.getElementById('schema-editor').value.trim();
 
-  if (!pagePath) return toast('error', 'Missing Page Path', 'Enter the AEM page path');
-  if (!rawSchema) return toast('error', 'Missing Schema', 'Enter or select a JSON-LD schema');
+      if (!pagePath) return toast('error', 'Missing Page Path', 'Enter the AEM page path');
+      if (!rawSchema) return toast('error', 'Missing Schema', 'Enter or select a JSON-LD schema');
 
-  let schema;
-  try {
-    schema = JSON.parse(rawSchema);
-  } catch (e) {
-    return toast('error', 'Invalid JSON', e.message);
-  }
+      let schema;
+      try {
+        schema = JSON.parse(rawSchema);
+      } catch (e) {
+        return toast('error', 'Invalid JSON', e.message);
+      }
 
-  openModal(
-    'Applying Schema to AEM',
-    `Pushing JSON-LD to: ${pagePath}`
-  );
+      openModal(
+        'Applying Schema to AEM',
+        `Pushing JSON-LD to: ${pagePath}`
+      );
 
-  try {
-    const result = await startStepAnimation(
-      api('POST', '/schema/apply', { pagePath, schema })
-    );
-    closeModal(true);
-    state.stats.total++;
-    state.stats.success++;
-    toast('success', 'Schema Applied!', result.message);
-    loadDashboard();
-  } catch (e) {
-    closeModal(false);
-    state.stats.total++;
-    state.stats.fail++;
-    toast('error', 'Apply Failed', e.message);
-  }
-}
+      try {
+        const result = await startStepAnimation(
+          api('POST', '/schema/apply', { pagePath, schema })
+        );
+        closeModal(true);
+        state.stats.total++;
+        state.stats.success++;
+        toast('success', 'Schema Applied!', result.message);
+        loadDashboard();
+      } catch (e) {
+        closeModal(false);
+        state.stats.total++;
+        state.stats.fail++;
+        toast('error', 'Apply Failed', e.message);
+      }
+    }
 
-// ─────────────────────────────────────────────
-// Read Schema
-// ─────────────────────────────────────────────
-async function readSchema() {
-  const path = document.getElementById('read-path').value.trim();
-  if (!path) return toast('error', 'Missing Path', 'Enter the AEM page path');
-  document.getElementById('read-result').value = '// Fetching...';
-  try {
-    const data = await api('GET', `/schema/get?path=${encodeURIComponent(path)}`);
-    document.getElementById('read-result').value = data.schema
-      ? JSON.stringify(data.schema, null, 2)
-      : '// No JSON-LD schema found on this page';
-    document.getElementById('read-meta').innerHTML = data.schema
-      ? `<div style="color:var(--accent2)">● Schema found</div>
+    // ─────────────────────────────────────────────
+    // Read Schema
+    // ─────────────────────────────────────────────
+    async function readSchema() {
+      const path = document.getElementById('read-path').value.trim();
+      if (!path) return toast('error', 'Missing Path', 'Enter the AEM page path');
+      document.getElementById('read-result').value = '// Fetching...';
+      try {
+        const data = await api('GET', `/schema/get?path=${encodeURIComponent(path)}`);
+        document.getElementById('read-result').value = data.schema
+          ? JSON.stringify(data.schema, null, 2)
+          : '// No JSON-LD schema found on this page';
+        document.getElementById('read-meta').innerHTML = data.schema
+          ? `<div style="color:var(--accent2)">● Schema found</div>
          <div>Type: <strong>${data.schemaType || 'unknown'}</strong></div>
          <div>Last Modified: ${data.lastModified || 'unknown'}</div>`
-      : `<div style="color:var(--text3)">No schema stored on this page</div>`;
-    toast('success', 'Schema Fetched', path);
-  } catch (e) {
-    document.getElementById('read-result').value = `// Error: ${e.message}`;
-    toast('error', 'Fetch Failed', e.message);
-  }
-}
+          : `<div style="color:var(--text3)">No schema stored on this page</div>`;
+        toast('success', 'Schema Fetched', path);
+      } catch (e) {
+        document.getElementById('read-result').value = `// Error: ${e.message}`;
+        toast('error', 'Fetch Failed', e.message);
+      }
+    }
 
-function copyResult() {
-  const val = document.getElementById('read-result').value;
-  navigator.clipboard.writeText(val).then(() => toast('info', 'Copied to clipboard'));
-}
+    function copyResult() {
+      const val = document.getElementById('read-result').value;
+      navigator.clipboard.writeText(val).then(() => toast('info', 'Copied to clipboard'));
+    }
 
-function sendToEditor() {
-  const val = document.getElementById('read-result').value;
-  if (!val || val.startsWith('//')) return toast('error', 'Nothing to send');
-  document.getElementById('schema-editor').value = val;
-  showPanel('apply');
-  toast('info', 'Sent to Editor');
-}
+    function sendToEditor() {
+      const val = document.getElementById('read-result').value;
+      if (!val || val.startsWith('//')) return toast('error', 'Nothing to send');
+      document.getElementById('schema-editor').value = val;
+      showPanel('apply');
+      toast('info', 'Sent to Editor');
+    }
 
-// ─────────────────────────────────────────────
-// Batch Apply
-// ─────────────────────────────────────────────
-async function applyBatch() {
-  const raw = document.getElementById('batch-editor').value.trim();
-  let pages;
-  try { pages = JSON.parse(raw); } catch (e) { return toast('error', 'Invalid JSON', e.message); }
-  if (!Array.isArray(pages) || !pages.length) return toast('error', 'Expected an array of { pagePath, schema }');
+    // ─────────────────────────────────────────────
+    // Batch Apply
+    // ─────────────────────────────────────────────
+    async function applyBatch() {
+      const raw = document.getElementById('batch-editor').value.trim();
+      let pages;
+      try { pages = JSON.parse(raw); } catch (e) { return toast('error', 'Invalid JSON', e.message); }
+      if (!Array.isArray(pages) || !pages.length) return toast('error', 'Expected an array of { pagePath, schema }');
 
-  openModal('Batch Processing', `Applying schema to ${pages.length} pages sequentially…`);
+      openModal('Batch Processing', `Applying schema to ${pages.length} pages sequentially…`);
 
-  try {
-    const result = await startStepAnimation(
-      api('POST', '/schema/apply-batch', { pages })
-    );
-    closeModal(true);
-    const successCount = result.results.filter(r => r.success).length;
-    state.stats.total += pages.length;
-    state.stats.success += successCount;
-    state.stats.fail += pages.length - successCount;
-    toast('success', 'Batch Complete', result.message);
+      try {
+        const result = await startStepAnimation(
+          api('POST', '/schema/apply-batch', { pages })
+        );
+        closeModal(true);
+        const successCount = result.results.filter(r => r.success).length;
+        state.stats.total += pages.length;
+        state.stats.success += successCount;
+        state.stats.fail += pages.length - successCount;
+        toast('success', 'Batch Complete', result.message);
 
-    // Render results
-    const wrap = document.getElementById('batch-results');
-    wrap.innerHTML = '<div class="card"><div class="card-body" style="padding:0"><table class="log-table"><thead><tr><th>Page Path</th><th>Status</th><th>Detail</th></tr></thead><tbody>' +
-      result.results.map(r => `<tr>
+        // Render results
+        const wrap = document.getElementById('batch-results');
+        wrap.innerHTML = '<div class="card"><div class="card-body" style="padding:0"><table class="log-table"><thead><tr><th>Page Path</th><th>Status</th><th>Detail</th></tr></thead><tbody>' +
+          result.results.map(r => `<tr>
         <td class="path">${r.pagePath}</td>
         <td>${r.success ? '<span class="badge-success">✓ Success</span>' : '<span class="badge-error">✕ Failed</span>'}</td>
         <td style="font-size:11px;color:var(--text3)">${r.error || ('AEM ' + (r.result?.status || ''))}</td>
       </tr>`).join('') +
-      '</tbody></table></div></div>';
-  } catch (e) {
-    closeModal(false);
-    toast('error', 'Batch Failed', e.message);
-  }
-}
+          '</tbody></table></div></div>';
+      } catch (e) {
+        closeModal(false);
+        toast('error', 'Batch Failed', e.message);
+      }
+    }
 
-function loadBatchExample() {
-  const ex = [
-    { pagePath: '/content/mysite/en/home', schema: { '@context': 'https://schema.org', '@type': 'WebPage', 'name': 'Home Page', 'description': 'Welcome to our site' } },
-    { pagePath: '/content/mysite/en/about', schema: { '@context': 'https://schema.org', '@type': 'AboutPage', 'name': 'About Us' } }
-  ];
-  document.getElementById('batch-editor').value = JSON.stringify(ex, null, 2);
-}
+    function loadBatchExample() {
+      const ex = [
+        { pagePath: '/content/mysite/en/home', schema: { '@context': 'https://schema.org', '@type': 'WebPage', 'name': 'Home Page', 'description': 'Welcome to our site' } },
+        { pagePath: '/content/mysite/en/about', schema: { '@context': 'https://schema.org', '@type': 'AboutPage', 'name': 'About Us' } }
+      ];
+      document.getElementById('batch-editor').value = JSON.stringify(ex, null, 2);
+    }
 
-function formatBatch() {
-  try {
-    const val = JSON.parse(document.getElementById('batch-editor').value);
-    document.getElementById('batch-editor').value = JSON.stringify(val, null, 2);
-  } catch (e) { toast('error', 'Invalid JSON', e.message); }
-}
+    function formatBatch() {
+      try {
+        const val = JSON.parse(document.getElementById('batch-editor').value);
+        document.getElementById('batch-editor').value = JSON.stringify(val, null, 2);
+      } catch (e) { toast('error', 'Invalid JSON', e.message); }
+    }
 
-// ─────────────────────────────────────────────
-// Configuration
-// ─────────────────────────────────────────────
-async function saveConfig() {
-  const baseUrl = document.getElementById('cfg-url').value.trim();
-  const username = document.getElementById('cfg-user').value.trim();
-  const password = document.getElementById('cfg-pass').value;
-  try {
-    const data = await api('POST', '/aem/config', { baseUrl, username, password });
-    toast('success', 'Config Saved', 'AEM connection updated');
-    document.getElementById('sidebar-url').textContent = data.config.baseUrl || 'Not set';
-    loadConfigStatus();
-  } catch (e) { toast('error', 'Save Failed', e.message); }
-}
+    // ─────────────────────────────────────────────
+    // Configuration
+    // ─────────────────────────────────────────────
+    async function saveConfig() {
+      const baseUrl = document.getElementById('cfg-url').value.trim();
+      const username = document.getElementById('cfg-user').value.trim();
+      const password = document.getElementById('cfg-pass').value;
+      try {
+        const data = await api('POST', '/aem/config', { baseUrl, username, password });
+        toast('success', 'Config Saved', 'AEM connection updated');
+        document.getElementById('sidebar-url').textContent = data.config.baseUrl || 'Not set';
+        loadConfigStatus();
+      } catch (e) { toast('error', 'Save Failed', e.message); }
+    }
 
-async function loadConfigStatus() {
-  try {
-    const data = await api('GET', '/aem/config');
-    document.getElementById('cfg-url').value = data.baseUrl || '';
-    document.getElementById('cfg-user').value = data.username || '';
-    document.getElementById('cfg-status').innerHTML = `
+    async function loadConfigStatus() {
+      try {
+        const data = await api('GET', '/aem/config');
+        document.getElementById('cfg-url').value = data.baseUrl || '';
+        document.getElementById('cfg-user').value = data.username || '';
+        document.getElementById('cfg-status').innerHTML = `
       AEM URL: <span style="color:var(--accent)">${data.baseUrl || 'Not set'}</span><br>
       Username: <span style="color:var(--accent)">${data.username || 'Not set'}</span><br>
       Password: <span style="color:var(--accent)">${data.hasPassword ? '●●●●●●●●' : 'Not set'}</span>
     `;
-    document.getElementById('sidebar-url').textContent = data.baseUrl || 'Not configured';
-  } catch (e) {}
-}
+        document.getElementById('sidebar-url').textContent = data.baseUrl || 'Not configured';
+      } catch (e) { }
+    }
 
-// ─────────────────────────────────────────────
-// Operation Log
-// ─────────────────────────────────────────────
-async function loadLog(limit) {
-  try {
-    const data = await api('GET', `/schema/log?limit=${limit || 50}`);
-    updateStats(data.log);
-    if (!limit) renderLogTable(data.log);
-    else renderRecentLog(data.log.slice(0, limit));
-  } catch (e) {}
-}
+    // ─────────────────────────────────────────────
+    // Operation Log
+    // ─────────────────────────────────────────────
+    async function loadLog(limit) {
+      try {
+        const data = await api('GET', `/schema/log?limit=${limit || 50}`);
+        updateStats(data.log);
+        if (!limit) renderLogTable(data.log);
+        else renderRecentLog(data.log.slice(0, limit));
+      } catch (e) { }
+    }
 
-function renderLogTable(log) {
-  const wrap = document.getElementById('log-table-wrap');
-  if (!log.length) {
-    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">◌</div><div class="empty-msg">No operations logged</div></div>';
-    return;
-  }
-  wrap.innerHTML = `<table class="log-table">
+    function renderLogTable(log) {
+      const wrap = document.getElementById('log-table-wrap');
+      if (!log.length) {
+        wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">◌</div><div class="empty-msg">No operations logged</div></div>';
+        return;
+      }
+      wrap.innerHTML = `<table class="log-table">
     <thead><tr><th>Timestamp</th><th>Page Path</th><th>Schema Type</th><th>Status</th><th>Detail</th></tr></thead>
     <tbody>${log.map(l => `<tr>
       <td>${new Date(l.timestamp).toLocaleString()}</td>
@@ -1270,15 +924,15 @@ function renderLogTable(log) {
       <td style="font-size:11px;color:var(--text3)">${l.error || ('AEM ' + (l.aemStatus || ''))}</td>
     </tr>`).join('')}</tbody>
   </table>`;
-}
+    }
 
-function renderRecentLog(log) {
-  const wrap = document.getElementById('recent-log');
-  if (!log.length) {
-    wrap.innerHTML = '<div class="empty-state" style="padding:30px"><div class="empty-icon">◌</div><div class="empty-msg">No operations yet</div></div>';
-    return;
-  }
-  wrap.innerHTML = `<table class="log-table">
+    function renderRecentLog(log) {
+      const wrap = document.getElementById('recent-log');
+      if (!log.length) {
+        wrap.innerHTML = '<div class="empty-state" style="padding:30px"><div class="empty-icon">◌</div><div class="empty-msg">No operations yet</div></div>';
+        return;
+      }
+      wrap.innerHTML = `<table class="log-table">
     <thead><tr><th>Page</th><th>Type</th><th>Status</th></tr></thead>
     <tbody>${log.map(l => `<tr>
       <td class="path">${l.pagePath}</td>
@@ -1286,86 +940,86 @@ function renderRecentLog(log) {
       <td>${l.status === 'success' ? '<span class="badge-success">✓</span>' : '<span class="badge-error">✕</span>'}</td>
     </tr>`).join('')}</tbody>
   </table>`;
-}
-
-function updateStats(log) {
-  const total = log.length;
-  const success = log.filter(l => l.status === 'success').length;
-  const fail = log.filter(l => l.status === 'error').length;
-  document.getElementById('stat-total').textContent = total || '0';
-  document.getElementById('stat-success').textContent = success || '0';
-  document.getElementById('stat-fail').textContent = fail || '0';
-}
-
-async function clearLog() {
-  await api('DELETE', '/schema/log');
-  toast('info', 'Log Cleared');
-  loadLog();
-}
-
-// ─────────────────────────────────────────────
-// Dashboard
-// ─────────────────────────────────────────────
-async function loadDashboard() {
-  await loadLog(3);
-  testConnection();
-}
-
-// ─────────────────────────────────────────────
-// Editor helpers
-// ─────────────────────────────────────────────
-const templates = {
-  webpage: { '@context': 'https://schema.org', '@type': 'WebPage', 'name': 'Page Name', 'description': 'Page description', 'url': 'https://www.example.com/page', 'inLanguage': 'en-US', 'breadcrumb': { '@type': 'BreadcrumbList', 'itemListElement': [{ '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': 'https://www.example.com' }] } },
-  article: { '@context': 'https://schema.org', '@type': 'Article', 'headline': 'Article Headline', 'description': 'Article description', 'author': { '@type': 'Person', 'name': 'Author Name' }, 'datePublished': new Date().toISOString().split('T')[0], 'dateModified': new Date().toISOString().split('T')[0], 'publisher': { '@type': 'Organization', 'name': 'Publisher Name', 'logo': { '@type': 'ImageObject', 'url': 'https://www.example.com/logo.png' } } },
-  product: { '@context': 'https://schema.org', '@type': 'Product', 'name': 'Product Name', 'description': 'Product description', 'sku': 'SKU-001', 'brand': { '@type': 'Brand', 'name': 'Brand Name' }, 'offers': { '@type': 'Offer', 'price': '99.99', 'priceCurrency': 'USD', 'availability': 'https://schema.org/InStock' } },
-  organization: { '@context': 'https://schema.org', '@type': 'Organization', 'name': 'Organization Name', 'url': 'https://www.example.com', 'logo': 'https://www.example.com/logo.png', 'contactPoint': { '@type': 'ContactPoint', 'telephone': '+1-000-000-0000', 'contactType': 'customer service' } },
-  faq: { '@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [{ '@type': 'Question', 'name': 'What is your return policy?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'You can return items within 30 days.' } }, { '@type': 'Question', 'name': 'How long does shipping take?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Standard shipping takes 5-7 business days.' } }] },
-  event: { '@context': 'https://schema.org', '@type': 'Event', 'name': 'Event Name', 'startDate': '2025-08-01T10:00', 'endDate': '2025-08-01T18:00', 'location': { '@type': 'Place', 'name': 'Venue Name', 'address': { '@type': 'PostalAddress', 'addressLocality': 'City', 'addressCountry': 'US' } }, 'organizer': { '@type': 'Organization', 'name': 'Organizer' } }
-};
-
-function loadTemplate(key, card) {
-  document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
-  card.classList.add('selected');
-  document.getElementById('schema-editor').value = JSON.stringify(templates[key], null, 2);
-}
-
-function formatJson() {
-  try {
-    const val = JSON.parse(document.getElementById('schema-editor').value);
-    document.getElementById('schema-editor').value = JSON.stringify(val, null, 2);
-  } catch (e) { toast('error', 'Invalid JSON', e.message); }
-}
-
-function clearEditor() { document.getElementById('schema-editor').value = ''; }
-function copyEditor() {
-  navigator.clipboard.writeText(document.getElementById('schema-editor').value)
-    .then(() => toast('info', 'Copied to clipboard'));
-}
-
-function validateJson() {
-  const el = document.getElementById('validation-msg');
-  el.style.display = 'block';
-  try {
-    const v = JSON.parse(document.getElementById('schema-editor').value);
-    const errs = [];
-    if (!v['@context']) errs.push('@context is missing');
-    if (!v['@type']) errs.push('@type is missing');
-    if (errs.length) {
-      el.innerHTML = `<div class="alert alert-error">⚠ ${errs.join(', ')}</div>`;
-    } else {
-      el.innerHTML = `<div class="alert" style="background:rgba(56,217,169,0.1);border:1px solid rgba(56,217,169,0.2);color:var(--accent2)">✓ Valid JSON-LD — @type: ${v['@type']}</div>`;
-      setTimeout(() => el.style.display = 'none', 3000);
     }
-  } catch (e) {
-    el.innerHTML = `<div class="alert alert-error">✕ ${e.message}</div>`;
-  }
-}
 
-// ─────────────────────────────────────────────
-// API Docs
-// ─────────────────────────────────────────────
-function renderApiDocs() {
-  document.getElementById('api-docs').innerHTML = `
+    function updateStats(log) {
+      const total = log.length;
+      const success = log.filter(l => l.status === 'success').length;
+      const fail = log.filter(l => l.status === 'error').length;
+      document.getElementById('stat-total').textContent = total || '0';
+      document.getElementById('stat-success').textContent = success || '0';
+      document.getElementById('stat-fail').textContent = fail || '0';
+    }
+
+    async function clearLog() {
+      await api('DELETE', '/schema/log');
+      toast('info', 'Log Cleared');
+      loadLog();
+    }
+
+    // ─────────────────────────────────────────────
+    // Dashboard
+    // ─────────────────────────────────────────────
+    async function loadDashboard() {
+      await loadLog(3);
+      testConnection();
+    }
+
+    // ─────────────────────────────────────────────
+    // Editor helpers
+    // ─────────────────────────────────────────────
+    const templates = {
+      webpage: { '@context': 'https://schema.org', '@type': 'WebPage', 'name': 'Page Name', 'description': 'Page description', 'url': 'https://www.example.com/page', 'inLanguage': 'en-US', 'breadcrumb': { '@type': 'BreadcrumbList', 'itemListElement': [{ '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': 'https://www.example.com' }] } },
+      article: { '@context': 'https://schema.org', '@type': 'Article', 'headline': 'Article Headline', 'description': 'Article description', 'author': { '@type': 'Person', 'name': 'Author Name' }, 'datePublished': new Date().toISOString().split('T')[0], 'dateModified': new Date().toISOString().split('T')[0], 'publisher': { '@type': 'Organization', 'name': 'Publisher Name', 'logo': { '@type': 'ImageObject', 'url': 'https://www.example.com/logo.png' } } },
+      product: { '@context': 'https://schema.org', '@type': 'Product', 'name': 'Product Name', 'description': 'Product description', 'sku': 'SKU-001', 'brand': { '@type': 'Brand', 'name': 'Brand Name' }, 'offers': { '@type': 'Offer', 'price': '99.99', 'priceCurrency': 'USD', 'availability': 'https://schema.org/InStock' } },
+      organization: { '@context': 'https://schema.org', '@type': 'Organization', 'name': 'Organization Name', 'url': 'https://www.example.com', 'logo': 'https://www.example.com/logo.png', 'contactPoint': { '@type': 'ContactPoint', 'telephone': '+1-000-000-0000', 'contactType': 'customer service' } },
+      faq: { '@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [{ '@type': 'Question', 'name': 'What is your return policy?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'You can return items within 30 days.' } }, { '@type': 'Question', 'name': 'How long does shipping take?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Standard shipping takes 5-7 business days.' } }] },
+      event: { '@context': 'https://schema.org', '@type': 'Event', 'name': 'Event Name', 'startDate': '2025-08-01T10:00', 'endDate': '2025-08-01T18:00', 'location': { '@type': 'Place', 'name': 'Venue Name', 'address': { '@type': 'PostalAddress', 'addressLocality': 'City', 'addressCountry': 'US' } }, 'organizer': { '@type': 'Organization', 'name': 'Organizer' } }
+    };
+
+    function loadTemplate(key, card) {
+      document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      document.getElementById('schema-editor').value = JSON.stringify(templates[key], null, 2);
+    }
+
+    function formatJson() {
+      try {
+        const val = JSON.parse(document.getElementById('schema-editor').value);
+        document.getElementById('schema-editor').value = JSON.stringify(val, null, 2);
+      } catch (e) { toast('error', 'Invalid JSON', e.message); }
+    }
+
+    function clearEditor() { document.getElementById('schema-editor').value = ''; }
+    function copyEditor() {
+      navigator.clipboard.writeText(document.getElementById('schema-editor').value)
+        .then(() => toast('info', 'Copied to clipboard'));
+    }
+
+    function validateJson() {
+      const el = document.getElementById('validation-msg');
+      el.style.display = 'block';
+      try {
+        const v = JSON.parse(document.getElementById('schema-editor').value);
+        const errs = [];
+        if (!v['@context']) errs.push('@context is missing');
+        if (!v['@type']) errs.push('@type is missing');
+        if (errs.length) {
+          el.innerHTML = `<div class="alert alert-error">⚠ ${errs.join(', ')}</div>`;
+        } else {
+          el.innerHTML = `<div class="alert" style="background:rgba(56,217,169,0.1);border:1px solid rgba(56,217,169,0.2);color:var(--accent2)">✓ Valid JSON-LD — @type: ${v['@type']}</div>`;
+          setTimeout(() => el.style.display = 'none', 3000);
+        }
+      } catch (e) {
+        el.innerHTML = `<div class="alert alert-error">✕ ${e.message}</div>`;
+      }
+    }
+
+    // ─────────────────────────────────────────────
+    // API Docs
+    // ─────────────────────────────────────────────
+    function renderApiDocs() {
+      document.getElementById('api-docs').innerHTML = `
   <style>
     .ep { margin-bottom: 28px; }
     .ep-method { display:inline-block; padding:3px 10px; border-radius:5px; font-size:11px; font-weight:700; margin-right:10px; }
@@ -1425,49 +1079,50 @@ function renderApiDocs() {
     <div class="ep-desc">Clear the operation log.</div>
   </div>
   `;
-}
+    }
 
-// ─────────────────────────────────────────────
-// Auth Guard + Boot
-// ─────────────────────────────────────────────
-async function doLogout() {
-  try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(_) {}
-  window.location.replace('/login.html');
-}
+    // ─────────────────────────────────────────────
+    // Auth Guard + Boot
+    // ─────────────────────────────────────────────
+    async function doLogout() {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) { }
+      window.location.replace('/login.html');
+    }
 
-async function populateUserChip(data) {
-  const initials = (data.username || '?').slice(0,2).toUpperCase();
-  document.getElementById('user-avatar').textContent = initials;
-  document.getElementById('user-display-name').textContent = data.username || '—';
-  const shortUrl = (data.aemUrl || '').replace('https://','').replace('http://','');
-  document.getElementById('user-display-url').textContent = shortUrl || '—';
-  document.getElementById('sidebar-url').textContent = shortUrl || 'Not configured';
-}
+    async function populateUserChip(data) {
+      const initials = (data.username || '?').slice(0, 2).toUpperCase();
+      document.getElementById('user-avatar').textContent = initials;
+      document.getElementById('user-display-name').textContent = data.username || '—';
+      const shortUrl = (data.aemUrl || '').replace('https://', '').replace('http://', '');
+      document.getElementById('user-display-url').textContent = shortUrl || '—';
+      document.getElementById('sidebar-url').textContent = shortUrl || 'Not configured';
+    }
 
-window.addEventListener('DOMContentLoaded', async () => {
-  // ── Auth check ──
-  const loader = document.getElementById('auth-loader');
-  try {
-    const res = await fetch('/api/auth/me');
-    if (!res.ok) { window.location.replace('/login.html'); return; }
-    const data = await res.json();
-    if (!data.loggedIn) { window.location.replace('/login.html'); return; }
-    populateUserChip(data);
-  } catch (_) {
-    window.location.replace('/login.html'); return;
-  }
-  loader.classList.add('gone');
-  document.querySelector('.shell').classList.add('ready');
+    window.addEventListener('DOMContentLoaded', async () => {
+      // ── Auth check ──
+      const loader = document.getElementById('auth-loader');
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) { window.location.replace('/login.html'); return; }
+        const data = await res.json();
+        if (!data.loggedIn) { window.location.replace('/login.html'); return; }
+        populateUserChip(data);
+      } catch (_) {
+        window.location.replace('/login.html'); return;
+      }
+      loader.classList.add('gone');
+      document.querySelector('.shell').classList.add('ready');
 
-  // ── Init ──
-  document.getElementById('schema-editor').value = JSON.stringify(templates.webpage, null, 2);
-  loadDashboard();
-});
-</script>
-<!-- Auth loader -->
-<div id="auth-loader">
-  <div class="auth-spinner"></div>
-  <div class="auth-label">VERIFYING SESSION</div>
-</div>
+      // ── Init ──
+      document.getElementById('schema-editor').value = JSON.stringify(templates.webpage, null, 2);
+      loadDashboard();
+    });
+  </script>
+  <!-- Auth loader -->
+  <div id="auth-loader">
+    <div class="auth-spinner"></div>
+    <div class="auth-label">VERIFYING SESSION</div>
+  </div>
 </body>
+
 </html>

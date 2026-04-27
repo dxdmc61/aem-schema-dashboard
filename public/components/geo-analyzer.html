@@ -1,0 +1,139 @@
+<div class="grid-2">
+    <!-- Left Column: Controls -->
+    <div>
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">🌍 GEO Content Analyzer</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Target Country / Market</label>
+            <select class="form-select" id="geo-target-country">
+              <option value="US">🇺🇸 United States (en-US)</option>
+              <option value="GB">🇬🇧 United Kingdom (en-GB)</option>
+              <option value="DE">🇩🇪 Germany (de-DE)</option>
+              <option value="JP">🇯🇵 Japan (ja-JP)</option>
+              <option value="IN">🇮🇳 India (en-IN)</option>
+              <option value="FR">🇫🇷 France (fr-FR)</option>
+              <option value="ES">🇪🇸 Spain (es-ES)</option>
+              <option value="BR">🇧🇷 Brazil (pt-BR)</option>
+              <option value="AU">🇦🇺 Australia (en-AU)</option>
+              <option value="CA">🇨🇦 Canada (en-CA)</option>
+            </select>
+          </div>
+  
+          <div class="form-group">
+            <label class="form-label">AEM Page Path</label>
+            <input class="form-input" id="geo-page-path" placeholder="/content/mysite/en/home" type="text" />
+            <button class="btn btn-ghost" style="margin-top:8px; width:100%" onclick="fetchCurrentPagePath()">
+              📄 Use Current Page
+            </button>
+          </div>
+  
+          <div class="form-group">
+            <label class="form-label">Active LLM Provider</label>
+            <div id="active-llm-display" style="background:var(--surface2); padding:10px; border-radius:8px; font-family:var(--mono); font-size:12px">
+              Loading...
+            </div>
+          </div>
+  
+          <div style="display:flex; gap:10px; margin-top:16px">
+            <button class="btn btn-primary" onclick="runGeoAnalysis()" style="flex:1">
+              🔍 Analyze Content
+            </button>
+            <button class="btn btn-ghost" onclick="clearGeoAnalysis()">Clear</button>
+          </div>
+        </div>
+      </div>
+  
+      <!-- GEO Rules Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📜 GEO Rules Reference</div>
+        </div>
+        <div class="card-body" id="geo-rules-display">
+          <div style="color:var(--text3); text-align:center; padding:20px">Select a country to view rules</div>
+        </div>
+      </div>
+  
+      <!-- Batch Analysis Card -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-header">
+          <div class="card-title">📚 Batch Analysis</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Multiple Pages (one per line)</label>
+            <textarea class="form-input" id="batch-pages-list" rows="3" placeholder="/content/mysite/en/home&#10;/content/mysite/en/about&#10;/content/mysite/en/contact" style="font-family:var(--mono); font-size:12px"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="runBatchGeoAnalysis()" style="width:100%">
+            🔍 Analyze All Pages
+          </button>
+          <div id="batch-progress" style="margin-top:12px; display:none">
+            <div class="progress-track"><div class="progress-fill" id="batch-progress-fill"></div></div>
+            <div id="batch-status" style="font-size:12px; color:var(--text3)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  
+    <!-- Right Column: Analysis Results -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📊 GEO Analysis Results</div>
+          <div id="geo-score-badge" style="display:none">
+            <span class="badge-success" style="padding:5px 12px">Score: 0</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="geo-analysis-results">
+            <div class="empty-state">
+              <div class="empty-icon">🌍</div>
+              <div class="empty-msg">Run analysis to see GEO compliance issues</div>
+            </div>
+          </div>
+          
+          <div id="geo-fix-actions" style="display:none; margin-top:20px">
+            <div class="alert alert-info" style="margin-bottom:16px">
+              <span>🤖</span>
+              <div>LLM will generate corrected content based on identified issues</div>
+            </div>
+            <div style="display:flex; gap:10px">
+              <button class="btn btn-success" onclick="applyGeoFix()" style="flex:1">
+                ✨ Auto-Fix & Apply to AEM
+              </button>
+              <button class="btn btn-ghost" onclick="previewFixedContent()">Preview Fix</button>
+            </div>
+          </div>
+        </div>
+      </div>
+  
+      <!-- Batch Results -->
+      <div class="card" style="margin-top:20px" id="batch-results-card" style="display:none">
+        <div class="card-header">
+          <div class="card-title">📊 Batch Analysis Results</div>
+        </div>
+        <div class="card-body" id="batch-results-content"></div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Preview Modal -->
+  <div id="preview-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:2000; align-items:center; justify-content:center; padding:20px">
+    <div class="card" style="max-width:800px; max-height:80vh; overflow:auto">
+      <div class="card-header">
+        <div class="card-title">🔮 Fixed Content Preview</div>
+        <button class="btn btn-ghost" onclick="closePreviewModal()" style="padding:4px 12px">✕</button>
+      </div>
+      <div class="card-body">
+        <div class="editor-wrap">
+          <textarea class="code-editor" id="preview-content" readonly style="min-height:400px"></textarea>
+        </div>
+        <div style="margin-top:16px; display:flex; gap:10px">
+          <button class="btn btn-primary" onclick="applyPreviewFix()" style="flex:1">Apply to AEM</button>
+          <button class="btn btn-ghost" onclick="copyPreviewContent()">Copy JSON</button>
+        </div>
+      </div>
+    </div>
+  </div>

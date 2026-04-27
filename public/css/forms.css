@@ -1,0 +1,228 @@
+/* forms.css - Form Elements */
+
+.form-group {
+    margin-bottom: 20px;
+  }
+  
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text2);
+    margin-bottom: 8px;
+    letter-spacing: 0.04em;
+  }
+  
+  .form-input,
+  .form-select,
+  .form-textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  
+  .form-input:focus,
+  .form-select:focus,
+  .form-textarea:focus {
+    border-color: var(--accent);
+  }
+  
+  .form-input::placeholder {
+    color: var(--text3);
+  }
+  
+  .form-input[type="password"] {
+    font-family: var(--mono);
+    letter-spacing: 0.1em;
+  }
+  
+  .form-textarea {
+    resize: vertical;
+    min-height: 100px;
+  }
+  
+  /* Select dropdown */
+  .form-select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239099b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+  }
+  
+  /* Editor buttons */
+  .editor-btn {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text2);
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: all 0.1s;
+  }
+  
+  .editor-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  
+  /* Buttons */
+  .btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  
+  .btn-primary:hover {
+    background: #6f7ef9;
+    transform: translateY(-1px);
+  }
+  
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+  
+  .btn-secondary {
+    background: var(--accent2);
+    color: #0a0c10;
+  }
+  
+  .btn-secondary:hover {
+    background: #4fe0b4;
+  }
+  
+  .btn-ghost {
+    background: transparent;
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+  
+  .btn-ghost:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  
+  .btn-danger {
+    background: rgba(255, 107, 107, 0.1);
+    color: var(--error);
+    border: 1px solid rgba(255, 107, 107, 0.2);
+  }
+  
+  .btn-danger:hover {
+    background: rgba(255, 107, 107, 0.2);
+  }
+  
+  .btn-success {
+    background: rgba(56, 217, 169, 0.1);
+    color: var(--accent2);
+    border: 1px solid rgba(56, 217, 169, 0.2);
+  }
+  
+  .btn-success:hover {
+    background: rgba(56, 217, 169, 0.2);
+  }
+  
+  .btn-warning {
+    background: rgba(255, 212, 59, 0.1);
+    color: var(--warning);
+    border: 1px solid rgba(255, 212, 59, 0.2);
+  }
+  
+  .btn-warning:hover {
+    background: rgba(255, 212, 59, 0.2);
+  }
+  
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+  
+  .btn-logout {
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 107, 107, 0.25);
+    background: rgba(255, 107, 107, 0.08);
+    color: var(--error);
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  
+  .btn-logout:hover {
+    background: rgba(255, 107, 107, 0.2);
+    border-color: var(--error);
+  }
+  
+  /* Input with icon */
+  .input-wrap {
+    position: relative;
+  }
+  
+  .input-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 15px;
+    color: var(--text3);
+    pointer-events: none;
+    transition: color 0.2s;
+    line-height: 1;
+  }
+  
+  .input-wrap:focus-within .input-icon {
+    color: var(--accent);
+  }
+  
+  .input-wrap .form-input {
+    padding-left: 44px;
+  }
+  
+  /* Toggle password button */
+  .toggle-pass {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text3);
+    font-size: 15px;
+    padding: 4px;
+    transition: color 0.2s;
+    line-height: 1;
+  }
+  
+  .toggle-pass:hover {
+    color: var(--text2);
+  }

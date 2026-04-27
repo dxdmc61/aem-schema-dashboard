@@ -1,0 +1,76 @@
+/* variables.css - CSS Variables & Theme */
+:root {
+    /* Colors */
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c23;
+    --surface3: #1f2430;
+    --border: #2a2f3d;
+    --border2: #2d3347;
+    
+    /* Accent Colors */
+    --accent: #5b6af7;
+    --accent-glow: rgba(91, 106, 247, 0.3);
+    --accent2: #38d9a9;
+    --accent2-glow: rgba(56, 217, 169, 0.2);
+    --accent3: #ff6b6b;
+    --accent4: #ffd43b;
+    
+    /* Text Colors */
+    --text: #e8eaf0;
+    --text2: #9099b2;
+    --text3: #5a6175;
+    
+    /* Status Colors */
+    --success: #38d9a9;
+    --error: #ff6b6b;
+    --warning: #ffd43b;
+    --info: #5b6af7;
+    
+    /* Typography */
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+    --spacing-2xl: 48px;
+    
+    /* Border Radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-2xl: 24px;
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.2);
+    --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.3);
+    
+    /* Transitions */
+    --transition-fast: 0.15s ease;
+    --transition-base: 0.25s ease;
+    --transition-slow: 0.4s ease;
+    
+    /* Z-Index Layers */
+    --z-base: 1;
+    --z-dropdown: 10;
+    --z-sticky: 100;
+    --z-modal: 1000;
+    --z-toast: 1000;
+    --z-overlay: 500;
+    --z-loader: 9999;
+  }
+  
+  /* Dark theme overrides (if needed) */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0c10;
+      --surface: #111318;
+    }
+  }
